@@ -1,0 +1,1091 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>Halka Arz Kâr Hesaplayıcı</title>
+
+<!-- Fontlar: Manrope (başlıklar) + Inter (gövde/veri) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+
+<!-- Excel export için SheetJS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<!-- PDF export için jsPDF + autotable -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+
+<style>
+  /* ============ TOKENLAR ============ */
+  :root{
+    --navy-900:#0B2138;
+    --navy-800:#0F2A47;
+    --navy-700:#173A5E;
+    --gold-500:#C9973E;
+    --gold-600:#B27F26;
+    --green-600:#1E8F5C;
+    --green-100:#E4F5EC;
+    --red-600:#D64545;
+    --red-100:#FBE9E9;
+    --bg:#F4F6F9;
+    --card:#FFFFFF;
+    --line:#E3E8EF;
+    --text:#16212E;
+    --text-soft:#5B6B7D;
+    --radius-lg:18px;
+    --radius-md:12px;
+    --radius-sm:8px;
+    --shadow-card:0 1px 2px rgba(15,42,71,.04), 0 8px 24px rgba(15,42,71,.06);
+    --shadow-card-hover:0 2px 4px rgba(15,42,71,.06), 0 12px 32px rgba(15,42,71,.09);
+  }
+
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing:antialiased;
+    padding-bottom:60px;
+  }
+  h1,h2,h3, .eyebrow{ font-family:'Manrope', 'Inter', sans-serif; }
+  .num{ font-family:'JetBrains Mono','Inter',monospace; font-variant-numeric:tabular-nums; }
+
+  /* ============ ÜST BAŞLIK ============ */
+  .topbar{
+    background:linear-gradient(135deg, var(--navy-900), var(--navy-700));
+    color:#fff;
+    padding:28px 18px 40px;
+    position:relative;
+    overflow:hidden;
+  }
+  .topbar::after{
+    content:"";
+    position:absolute; right:-40px; top:-60px;
+    width:220px; height:220px; border-radius:50%;
+    background:radial-gradient(circle, rgba(201,151,62,.22), transparent 70%);
+  }
+  .topbar-inner{ max-width:960px; margin:0 auto; position:relative; z-index:1;}
+  .eyebrow{
+    font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--gold-500); margin:0 0 6px;
+  }
+  .topbar h1{ font-size:24px; font-weight:800; margin:0 0 4px; letter-spacing:-.01em;}
+  .topbar p{ margin:0; font-size:13.5px; color:#B9C6D6; }
+
+  .wrap{ max-width:960px; margin:-24px auto 0; padding:0 14px; }
+
+  /* ============ İSTATİSTİK ŞERİDİ (Ticker) ============ */
+  .ticker{
+    display:grid;
+    grid-template-columns:repeat(4, 1fr);
+    background:var(--navy-800);
+    border-radius:var(--radius-lg);
+    box-shadow:var(--shadow-card);
+    overflow:hidden;
+    border-top:3px solid var(--ticker-accent, var(--gold-500));
+  }
+  .ticker-item{
+    padding:16px 14px;
+    border-right:1px solid rgba(255,255,255,.08);
+    border-bottom:1px solid rgba(255,255,255,.08);
+  }
+  .ticker-item:nth-child(4n){ border-right:none; }
+  .ticker-label{ font-size:10.5px; color:#9FB0C3; text-transform:uppercase; letter-spacing:.08em; font-weight:600; margin-bottom:4px;}
+  .ticker-value{ font-size:16px; font-weight:600; color:#fff; }
+  .ticker-value.pos{ color:#5FD79A; }
+  .ticker-value.neg{ color:#FF8A8A; }
+  .ticker-value small{ display:block; font-size:10.5px; color:#9FB0C3; font-weight:500; margin-top:2px;}
+
+  @media (max-width:640px){
+    .ticker{ grid-template-columns:repeat(2, 1fr); }
+    .ticker-item:nth-child(2n){ border-right:none; }
+    .ticker-item:nth-child(4n){ border-right:1px solid rgba(255,255,255,.08); }
+  }
+
+  /* ============ KARTLAR ============ */
+  .card{
+    background:var(--card);
+    border-radius:var(--radius-lg);
+    box-shadow:var(--shadow-card);
+    padding:22px;
+    margin-top:16px;
+  }
+  .card h2{
+    font-size:15px; font-weight:700; margin:0 0 16px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .card h2 .dot{ width:8px; height:8px; border-radius:50%; background:var(--gold-500); display:inline-block;}
+
+  /* ============ FORM ============ */
+  .form-grid{
+    display:grid;
+    grid-template-columns:repeat(2, 1fr);
+    gap:14px;
+  }
+  .field{ display:flex; flex-direction:column; gap:6px; }
+  .field.full{ grid-column:1 / -1; }
+  label{ font-size:12.5px; font-weight:600; color:var(--text-soft); }
+  input[type="text"], input[type="number"], input[type="date"], select{
+    border:1.5px solid var(--line);
+    border-radius:var(--radius-sm);
+    padding:11px 12px;
+    font-size:15px;
+    font-family:'Inter', sans-serif;
+    color:var(--text);
+    background:#FBFCFD;
+    outline:none;
+    transition:border-color .15s ease, background .15s ease;
+    width:100%;
+  }
+  input:focus, select:focus{
+    border-color:var(--navy-700);
+    background:#fff;
+  }
+  input.error{ border-color:var(--red-600); background:var(--red-100); }
+  .hint{ font-size:11.5px; color:var(--text-soft); }
+
+  .account-toggle{
+    display:flex; gap:8px;
+  }
+  .account-toggle button{
+    flex:1;
+    border:1.5px solid var(--line);
+    background:#FBFCFD;
+    border-radius:var(--radius-sm);
+    padding:10px;
+    font-size:14px;
+    font-weight:600;
+    color:var(--text-soft);
+    cursor:pointer;
+    transition:all .15s ease;
+  }
+  .account-toggle button.active{
+    border-color:var(--navy-800);
+    background:var(--navy-800);
+    color:#fff;
+  }
+
+  .btn-row{ display:flex; gap:10px; margin-top:18px; }
+  .btn{
+    flex:1;
+    border:none;
+    border-radius:var(--radius-md);
+    padding:14px;
+    font-size:15px;
+    font-weight:700;
+    font-family:'Manrope', sans-serif;
+    cursor:pointer;
+    transition:transform .1s ease, filter .15s ease;
+  }
+  .btn:active{ transform:scale(.98); }
+  .btn-primary{ background:var(--navy-800); color:#fff; }
+  .btn-primary:hover{ filter:brightness(1.1); }
+  .btn-ghost{ background:#EEF1F5; color:var(--text-soft); }
+  .btn-ghost:hover{ background:#E4E8EE; }
+  .btn-gold{ background:var(--gold-500); color:#1A1200; }
+  .btn-gold:hover{ filter:brightness(1.05); }
+  .btn-small{
+    padding:8px 12px; font-size:12.5px; border-radius:var(--radius-sm); font-weight:600; border:none; cursor:pointer;
+  }
+
+  /* ============ SONUÇ KARTI ============ */
+  #resultCard{ display:none; }
+  #resultCard.show{ display:block; }
+  .result-title-row{ display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;}
+  .result-stock{ font-size:19px; font-weight:800; font-family:'Manrope',sans-serif; }
+  .result-badge{
+    font-size:11.5px; font-weight:700; padding:5px 10px; border-radius:999px;
+  }
+  .result-badge.pos{ background:var(--green-100); color:var(--green-600); }
+  .result-badge.neg{ background:var(--red-100); color:var(--red-600); }
+
+  .result-grid{
+    display:grid; grid-template-columns:repeat(2,1fr); gap:12px;
+  }
+  .result-item{
+    background:#F7F9FB; border-radius:var(--radius-sm); padding:12px 14px;
+  }
+  .result-item .rl{ font-size:11px; color:var(--text-soft); font-weight:600; text-transform:uppercase; letter-spacing:.05em; margin-bottom:4px;}
+  .result-item .rv{ font-size:16.5px; font-weight:700; }
+  .result-item.wide{ grid-column:1/-1; }
+  .result-item.profit .rv{ color:var(--green-600); font-size:20px; }
+  .result-item.profit.neg .rv{ color:var(--red-600); }
+
+  /* ============ GEÇMİŞ ARAÇ ÇUBUĞU ============ */
+  .history-toolbar{
+    display:flex; flex-wrap:wrap; gap:10px; margin-bottom:14px; align-items:center;
+  }
+  .search-box{
+    flex:1 1 180px;
+    position:relative;
+  }
+  .search-box input{ padding-left:34px; }
+  .search-box::before{
+    content:"🔍"; position:absolute; left:11px; top:50%; transform:translateY(-50%); font-size:13px; opacity:.5;
+  }
+  .sort-select{ flex:0 0 auto; min-width:150px; }
+  .export-btns{ display:flex; gap:8px; }
+  .export-btns button{
+    background:#EEF1F5; color:var(--navy-800);
+    display:flex; align-items:center; gap:5px;
+  }
+  .export-btns button:hover{ background:#E4E8EE; }
+  .danger-btn{ background:var(--red-100); color:var(--red-600); }
+  .danger-btn:hover{ background:#F7D6D6; }
+
+  /* ============ TABLO ============ */
+  .table-scroll{
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
+    border-radius:var(--radius-md);
+    border:1px solid var(--line);
+  }
+  table{ border-collapse:collapse; width:100%; min-width:1100px; font-size:13px; }
+  thead th{
+    background:var(--navy-800); color:#fff;
+    text-align:left; padding:10px 12px; font-weight:600;
+    font-size:11.5px; text-transform:uppercase; letter-spacing:.04em;
+    white-space:nowrap;
+    position:sticky; top:0;
+    cursor:pointer; user-select:none;
+  }
+  thead th:hover{ background:var(--navy-700); }
+  thead th .arrow{ opacity:.6; font-size:10px; margin-left:3px; }
+  tbody td{
+    padding:10px 12px; border-bottom:1px solid var(--line); white-space:nowrap;
+  }
+  tbody tr:last-child td{ border-bottom:none; }
+  tbody tr:hover{ background:#F7F9FB; }
+  td.profit-pos{ color:var(--green-600); font-weight:700; }
+  td.profit-neg{ color:var(--red-600); font-weight:700; }
+  .row-actions{ display:flex; gap:6px; }
+  .row-actions button{
+    border:none; border-radius:6px; padding:6px 9px; font-size:11.5px; cursor:pointer; font-weight:600;
+  }
+  .edit-btn{ background:#E8EEF7; color:var(--navy-800); }
+  .del-btn{ background:var(--red-100); color:var(--red-600); }
+  .empty-state{
+    text-align:center; padding:40px 20px; color:var(--text-soft); font-size:13.5px;
+  }
+
+  /* ============ TOAST / UYARI ============ */
+  #toast{
+    position:fixed; left:50%; bottom:24px; transform:translateX(-50%) translateY(20px);
+    background:var(--navy-900); color:#fff; padding:12px 20px; border-radius:999px;
+    font-size:13.5px; font-weight:600; box-shadow:0 10px 30px rgba(0,0,0,.25);
+    opacity:0; pointer-events:none; transition:all .25s ease; z-index:999; max-width:90vw; text-align:center;
+  }
+  #toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  #toast.warn{ background:var(--red-600); }
+
+  /* ============ MODAL ONAY ============ */
+  .modal-bg{
+    position:fixed; inset:0; background:rgba(11,33,56,.55);
+    display:none; align-items:center; justify-content:center; z-index:1000; padding:20px;
+  }
+  .modal-bg.show{ display:flex; }
+  .modal-box{
+    background:#fff; border-radius:var(--radius-lg); padding:22px; max-width:340px; width:100%;
+    box-shadow:0 20px 60px rgba(0,0,0,.3);
+  }
+  .modal-box h3{ margin:0 0 8px; font-size:16px; }
+  .modal-box p{ margin:0 0 18px; font-size:13.5px; color:var(--text-soft); }
+  .modal-actions{ display:flex; gap:10px; }
+  .modal-actions button{ flex:1; }
+
+  @media (max-width:520px){
+    .form-grid{ grid-template-columns:1fr; }
+    .result-grid{ grid-template-columns:1fr; }
+    .card{ padding:16px; }
+    .topbar h1{ font-size:20px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <p class="eyebrow">BIST • Halka Arz Takibi</p>
+    <h1>Halka Arz Kâr Hesaplayıcı</h1>
+    <p>Alış-satışlarınızı girin, kârınızı ve iş günü süresini anında görün.</p>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- İSTATİSTİK ŞERİDİ -->
+  <div class="ticker" id="tickerStrip">
+    <div class="ticker-item"><div class="ticker-label">Toplam İşlem</div><div class="ticker-value num" id="stTotalCount">0</div></div>
+    <div class="ticker-item"><div class="ticker-label">Toplam Yatırım</div><div class="ticker-value num" id="stTotalCost">0 TL</div></div>
+    <div class="ticker-item"><div class="ticker-label">Toplam Satış</div><div class="ticker-value num" id="stTotalSale">0 TL</div></div>
+    <div class="ticker-item"><div class="ticker-label">Toplam Net Kâr</div><div class="ticker-value num" id="stTotalProfit">0 TL</div></div>
+    <div class="ticker-item"><div class="ticker-label">Ortalama Kâr %</div><div class="ticker-value num" id="stAvgPct">%0</div></div>
+    <div class="ticker-item"><div class="ticker-label">Toplam Lot</div><div class="ticker-value num" id="stTotalLot">0</div></div>
+    <div class="ticker-item"><div class="ticker-label">En Çok Kazandıran</div><div class="ticker-value" id="stBestStock">—</div></div>
+    <div class="ticker-item"><div class="ticker-label">En Yüksek / Düşük Kâr</div><div class="ticker-value num" id="stMinMax">— / —</div></div>
+  </div>
+
+  <!-- FORM KARTI -->
+  <div class="card">
+    <h2><span class="dot"></span> Yeni İşlem</h2>
+    <div class="form-grid">
+      <div class="field full">
+        <label for="fStock">Hisse Adı</label>
+        <input type="text" id="fStock" placeholder="Örn: METEN" maxlength="12" style="text-transform:uppercase;">
+      </div>
+
+      <div class="field">
+        <label for="fBuyPrice">Alış Fiyatı (TL)</label>
+        <input type="text" inputmode="decimal" id="fBuyPrice" placeholder="20,00">
+      </div>
+      <div class="field">
+        <label for="fSellPrice" id="fSellPriceLabel">Satış Fiyatı (TL)</label>
+        <input type="text" inputmode="decimal" id="fSellPrice" placeholder="34,50">
+      </div>
+      <div class="field" id="sellPrice2Field" style="display:none;">
+        <label for="fSellPrice2">2. Hesap Satış Fiyatı (TL)</label>
+        <input type="text" inputmode="decimal" id="fSellPrice2" placeholder="36,00">
+      </div>
+
+      <div class="field">
+        <label for="fLot">Lot Sayısı</label>
+        <input type="text" inputmode="numeric" id="fLot" placeholder="150">
+      </div>
+      <div class="field">
+        <label>Kaç Hesaptan Katıldınız?</label>
+        <div class="account-toggle">
+          <button type="button" class="acc-btn active" data-val="1">1 Hesap</button>
+          <button type="button" class="acc-btn" data-val="2">2 Hesap</button>
+        </div>
+      </div>
+      <div class="field full hint" id="twoAccountHint" style="display:none;">
+        Her iki hesap için de girdiğiniz lot sayısı aynı kabul edilir; sadece satış fiyatları farklı olabilir. Toplam lot = Girilen lot × 2.
+      </div>
+
+      <div class="field">
+        <label for="fBuyDate">Alış Tarihi</label>
+        <input type="date" id="fBuyDate">
+      </div>
+      <div class="field">
+        <label for="fSellDate">Satış Tarihi</label>
+        <input type="date" id="fSellDate">
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" id="calcBtn">Hesapla</button>
+      <button class="btn btn-ghost" id="clearBtn">Temizle</button>
+    </div>
+  </div>
+
+  <!-- SONUÇ KARTI -->
+  <div class="card" id="resultCard">
+    <div class="result-title-row">
+      <div class="result-stock" id="rStockName">—</div>
+      <div class="result-badge" id="rBadge">%0</div>
+    </div>
+    <div class="result-grid">
+      <div class="result-item"><div class="rl">Alış Fiyatı</div><div class="rv num" id="rBuy">0,00 TL</div></div>
+      <div class="result-item"><div class="rl" id="rSellLabel">Satış Fiyatı</div><div class="rv num" id="rSell">0,00 TL</div></div>
+      <div class="result-item"><div class="rl">Lot / Hesap Sayısı</div><div class="rv num" id="rLotAcc">0 / 1</div></div>
+      <div class="result-item"><div class="rl">Toplam Lot</div><div class="rv num" id="rTotalLot">0</div></div>
+      <div class="result-item"><div class="rl">Toplam Maliyet</div><div class="rv num" id="rCost">0 TL</div></div>
+      <div class="result-item"><div class="rl">Toplam Satış Tutarı</div><div class="rv num" id="rSale">0 TL</div></div>
+      <div class="result-item"><div class="rl" id="rPerLotLabel">Lot Başına Kâr</div><div class="rv num" id="rPerLot">0 TL</div></div>
+      <div class="result-item"><div class="rl">Borsada Bekleme</div><div class="rv num" id="rDays">—</div></div>
+      <div class="result-item wide profit" id="rProfitBox">
+        <div class="rl">Net Kâr</div>
+        <div class="rv num" id="rProfit">+0 TL</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GEÇMİŞ KARTI -->
+  <div class="card">
+    <h2><span class="dot"></span> İşlem Geçmişi</h2>
+    <div class="history-toolbar">
+      <div class="search-box">
+        <input type="text" id="searchBox" placeholder="Hisse adına göre ara...">
+      </div>
+      <select class="sort-select" id="sortSelect">
+        <option value="date_desc">Son Yapılan İşlem</option>
+        <option value="date_asc">En Eski İşlem</option>
+        <option value="profit_desc">En Yüksek Kâr</option>
+        <option value="profit_asc">En Düşük Kâr</option>
+        <option value="lot_desc">En Yüksek Lot</option>
+        <option value="pct_desc">En Yüksek Yüzde Kazanç</option>
+      </select>
+      <div class="export-btns">
+        <button class="btn-small" id="exportExcelBtn">📊 Excel</button>
+        <button class="btn-small" id="exportPdfBtn">📄 PDF</button>
+        <button class="btn-small danger-btn" id="clearAllBtn">🗑 Tümünü Sil</button>
+      </div>
+    </div>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th data-key="createdAt">İşlem Tarihi</th>
+            <th data-key="stock">Hisse</th>
+            <th data-key="accounts">Hesap</th>
+            <th data-key="buyDate">Alış Tarihi</th>
+            <th data-key="sellDate">Satış Tarihi</th>
+            <th data-key="days">İş Günü</th>
+            <th data-key="buyPrice">Alış Fiyatı</th>
+            <th data-key="sellPrice">Satış Fiyatı</th>
+            <th data-key="lot">Lot</th>
+            <th data-key="totalLot">Toplam Lot</th>
+            <th data-key="totalCost">Toplam Maliyet</th>
+            <th data-key="totalSale">Toplam Satış</th>
+            <th data-key="profit">Net Kâr</th>
+            <th data-key="pct">Kâr %</th>
+            <th>İşlemler</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody">
+        </tbody>
+      </table>
+    </div>
+    <div class="empty-state" id="emptyState" style="display:none;">Henüz kayıtlı işlem yok. İlk hesaplamanızı yapın.</div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<div class="modal-bg" id="confirmModal">
+  <div class="modal-box">
+    <h3 id="modalTitle">Emin misiniz?</h3>
+    <p id="modalText">Bu işlem geri alınamaz.</p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="modalCancel">Vazgeç</button>
+      <button class="btn danger-btn" id="modalConfirm" style="font-family:'Manrope',sans-serif;">Evet, Sil</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   HALKA ARZ KÂR HESAPLAYICI - JS
+   Modüller: Yardımcılar / Tatil-İş Günü Hesabı / Form / 
+             Hesaplama / Geçmiş Yönetimi / Tablo / İstatistik /
+             Export (Excel-PDF) / Olay Dinleyiciler
+   ========================================================= */
+
+/* ---------- 1. YARDIMCI FONKSİYONLAR ---------- */
+
+// LocalStorage anahtarı
+const STORAGE_KEY = 'halkaArziIslemleri';
+
+// Girilen "20,00" veya "20.00" gibi metni sayıya çevirir
+function parseNum(str){
+  if(str === null || str === undefined) return NaN;
+  str = String(str).trim().replace(/\./g,'').replace(',', '.');
+  const n = parseFloat(str);
+  return n;
+}
+
+// Sayıyı Türk Lirası formatında gösterir (örn: 6.000,00 TL)
+function formatTL(num){
+  const n = Number(num) || 0;
+  return n.toLocaleString('tr-TR', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' TL';
+}
+
+// Sayıyı ondalıklı Türkçe format ile gösterir (TL eki olmadan)
+function formatNum(num, decimals=2){
+  const n = Number(num) || 0;
+  return n.toLocaleString('tr-TR', {minimumFractionDigits:decimals, maximumFractionDigits:decimals});
+}
+
+// Basit benzersiz ID üretici
+function generateId(){
+  return 'txn_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8);
+}
+
+// Toast bildirim göster
+let toastTimer = null;
+function showToast(msg, isWarning=false){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.toggle('warn', isWarning);
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> el.classList.remove('show'), 2600);
+}
+
+// Tarihi GG.AA.YYYY formatına çevirir (input: YYYY-MM-DD)
+function formatDateTR(isoDate){
+  if(!isoDate) return '—';
+  const [y,m,d] = isoDate.split('-');
+  return `${d}.${m}.${y}`;
+}
+
+/* ---------- 2. BORSA İSTANBUL TATİL GÜNLERİ VE İŞ GÜNÜ HESABI ---------- */
+
+// Sabit resmi tatiller her yıl için otomatik üretilir (Ay-Gün formatında)
+const FIXED_HOLIDAYS_MMDD = ['01-01','04-23','05-01','05-19','07-15','08-30','10-29'];
+
+// Dini bayramlar yıldan yıla değiştiği için manuel tanımlanmıştır (arife günü dahil,
+// çünkü BIST arife günü öğleden sonra kapalıdır; hesaplamada tam gün sayılır).
+// Kaynak: Diyanet İşleri Başkanlığı resmi/tahmini dini bayram takvimleri.
+const RELIGIOUS_HOLIDAYS = [
+  // 2023
+  '2023-04-20','2023-04-21','2023-04-22','2023-04-23',
+  '2023-06-27','2023-06-28','2023-06-29','2023-06-30',
+  // 2024
+  '2024-04-09','2024-04-10','2024-04-11','2024-04-12',
+  '2024-06-15','2024-06-16','2024-06-17','2024-06-18','2024-06-19',
+  // 2025
+  '2025-03-29','2025-03-30','2025-03-31','2025-04-01',
+  '2025-06-05','2025-06-06','2025-06-07','2025-06-08','2025-06-09',
+  // 2026
+  '2026-03-18','2026-03-19','2026-03-20','2026-03-21',
+  '2026-05-25','2026-05-26','2026-05-27','2026-05-28','2026-05-29',
+  // 2027
+  '2027-03-08','2027-03-09','2027-03-10','2027-03-11',
+  '2027-05-14','2027-05-15','2027-05-16','2027-05-17','2027-05-18',
+  // 2028
+  '2028-02-25','2028-02-26','2028-02-27','2028-02-28',
+  '2028-05-02','2028-05-03','2028-05-04','2028-05-05','2028-05-06'
+];
+
+// Bir tarihin resmi/dini tatil olup olmadığını kontrol eder
+function isHoliday(dateObj){
+  const iso = toISO(dateObj);
+  const mmdd = iso.slice(5); // "MM-DD"
+  if(FIXED_HOLIDAYS_MMDD.includes(mmdd)) return true;
+  if(RELIGIOUS_HOLIDAYS.includes(iso)) return true;
+  return false;
+}
+
+// Date objesini YYYY-MM-DD stringine çevirir (yerel saat diliminde)
+function toISO(d){
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+
+// Alış ve satış tarihi arasında BIST'in açık olduğu iş günü sayısını hesaplar.
+// Hem alış günü hem satış günü, iş günüyse sayıma dahil edilir (kapsayıcı aralık).
+// Cumartesi, pazar ve resmi/dini tatiller sayılmaz.
+function calculateBusinessDays(buyDateStr, sellDateStr){
+  if(!buyDateStr || !sellDateStr) return null;
+  const start = new Date(buyDateStr + 'T00:00:00');
+  const end = new Date(sellDateStr + 'T00:00:00');
+  if(isNaN(start) || isNaN(end) || end < start) return null;
+
+  let count = 0;
+  const cursor = new Date(start); // alış tarihinden başla (dahil)
+
+  while(cursor <= end){
+    const day = cursor.getDay(); // 0=Pazar, 6=Cumartesi
+    if(day !== 0 && day !== 6 && !isHoliday(cursor)){
+      count++;
+    }
+    cursor.setDate(cursor.getDate()+1);
+  }
+  return count;
+}
+
+/* ---------- 3. FORM DURUMU ---------- */
+
+let selectedAccounts = 1; // varsayılan 1 hesap
+let editingId = null; // düzenleme modunda hangi kaydın güncellendiği
+
+const accBtns = document.querySelectorAll('.acc-btn');
+accBtns.forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    accBtns.forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedAccounts = Number(btn.dataset.val);
+    updateAccountUI();
+  });
+});
+
+// Hesap sayısına göre 2. hesap satış fiyatı alanını ve etiketleri günceller
+function updateAccountUI(){
+  const twoAccounts = selectedAccounts === 2;
+  document.getElementById('sellPrice2Field').style.display = twoAccounts ? 'flex' : 'none';
+  document.getElementById('twoAccountHint').style.display = twoAccounts ? 'block' : 'none';
+  document.getElementById('fSellPriceLabel').textContent = twoAccounts ? '1. Hesap Satış Fiyatı (TL)' : 'Satış Fiyatı (TL)';
+  if(!twoAccounts){ document.getElementById('fSellPrice2').value = ''; document.getElementById('fSellPrice2').classList.remove('error'); }
+}
+
+// Hisse adı otomatik büyük harf
+document.getElementById('fStock').addEventListener('input', function(){
+  this.value = this.value.toUpperCase();
+});
+
+// Enter tuşu ile hesaplama
+document.querySelectorAll('#fStock,#fBuyPrice,#fSellPrice,#fSellPrice2,#fLot,#fBuyDate,#fSellDate').forEach(inp=>{
+  inp.addEventListener('keydown', e=>{
+    if(e.key === 'Enter'){ e.preventDefault(); calculate(); }
+  });
+});
+
+/* ---------- 4. HESAPLAMA ---------- */
+
+function clearErrorStyles(){
+  ['fStock','fBuyPrice','fSellPrice','fSellPrice2','fLot'].forEach(id=>{
+    document.getElementById(id).classList.remove('error');
+  });
+}
+
+function calculate(){
+  clearErrorStyles();
+
+  const stock = document.getElementById('fStock').value.trim();
+  const buyPrice = parseNum(document.getElementById('fBuyPrice').value);
+  const sellPrice = parseNum(document.getElementById('fSellPrice').value);
+  const isTwoAccounts = selectedAccounts === 2;
+  const sellPrice2 = isTwoAccounts ? parseNum(document.getElementById('fSellPrice2').value) : null;
+  const lot = parseInt(document.getElementById('fLot').value.replace(/\./g,''), 10);
+  const buyDate = document.getElementById('fBuyDate').value;
+  const sellDate = document.getElementById('fSellDate').value;
+
+  // Doğrulama
+  let hasError = false;
+  if(!stock){ document.getElementById('fStock').classList.add('error'); hasError = true; }
+  if(isNaN(buyPrice) || buyPrice <= 0){ document.getElementById('fBuyPrice').classList.add('error'); hasError = true; }
+  if(isNaN(sellPrice) || sellPrice <= 0){ document.getElementById('fSellPrice').classList.add('error'); hasError = true; }
+  if(isTwoAccounts && (isNaN(sellPrice2) || sellPrice2 <= 0)){ document.getElementById('fSellPrice2').classList.add('error'); hasError = true; }
+  if(isNaN(lot) || lot <= 0){ document.getElementById('fLot').classList.add('error'); hasError = true; }
+
+  if(hasError){
+    showToast('Lütfen tüm alanları doğru şekilde doldurun.', true);
+    return;
+  }
+
+  // İki hesap seçiliyse her hesabın kendi satış fiyatına göre ayrı ayrı hesapla,
+  // sonra toplamları birleştir. Tek hesapta eski davranış aynen korunur.
+  const totalLot = lot * selectedAccounts;
+  const totalCost = buyPrice * totalLot;
+  let totalSale, profit, pct, perLot;
+
+  if(isTwoAccounts){
+    const sale1 = sellPrice * lot;
+    const sale2 = sellPrice2 * lot;
+    totalSale = sale1 + sale2;
+    profit = totalSale - totalCost;
+    pct = (profit / totalCost) * 100; // gerçek karma satış fiyatına göre oran
+    perLot = (totalSale / totalLot) - buyPrice; // ortalama lot başına kâr
+  } else {
+    totalSale = sellPrice * lot;
+    profit = totalSale - totalCost;
+    pct = ((sellPrice - buyPrice) / buyPrice) * 100;
+    perLot = sellPrice - buyPrice;
+  }
+
+  let businessDays = null;
+  if(buyDate && sellDate){
+    businessDays = calculateBusinessDays(buyDate, sellDate);
+    if(businessDays === null){
+      showToast('Satış tarihi, alış tarihinden önce olamaz.', true);
+      return;
+    }
+  }
+
+  const record = {
+    id: editingId || generateId(),
+    createdAt: editingId ? getExistingCreatedAt(editingId) : new Date().toISOString(),
+    stock, buyPrice, sellPrice, sellPrice2, lot, accounts: selectedAccounts,
+    totalLot, totalCost, totalSale, profit, pct, perLot,
+    buyDate: buyDate || null, sellDate: sellDate || null, days: businessDays
+  };
+
+  saveOrUpdateRecord(record);
+  renderResultCard(record);
+  renderTable();
+  renderStats();
+  showToast(editingId ? 'İşlem güncellendi.' : 'İşlem kaydedildi.');
+  editingId = null;
+  document.getElementById('calcBtn').textContent = 'Hesapla';
+}
+
+function getExistingCreatedAt(id){
+  const list = loadRecords();
+  const found = list.find(r=>r.id === id);
+  return found ? found.createdAt : new Date().toISOString();
+}
+
+function renderResultCard(r){
+  document.getElementById('rStockName').textContent = r.stock;
+  const badge = document.getElementById('rBadge');
+  badge.textContent = (r.pct>=0?'+':'') + formatNum(r.pct) + '%';
+  badge.className = 'result-badge ' + (r.pct >= 0 ? 'pos':'neg');
+
+  document.getElementById('rBuy').textContent = formatTL(r.buyPrice);
+  const twoAcc = r.accounts === 2 && r.sellPrice2 !== null && r.sellPrice2 !== undefined;
+  document.getElementById('rSellLabel').textContent = twoAcc ? 'Satış Fiyatı (1. / 2. Hesap)' : 'Satış Fiyatı';
+  if(twoAcc){
+    document.getElementById('rSell').innerHTML = `${formatTL(r.sellPrice)} <span style="color:var(--text-soft); font-weight:500;">/</span> ${formatTL(r.sellPrice2)}`;
+  } else {
+    document.getElementById('rSell').textContent = formatTL(r.sellPrice);
+  }
+  document.getElementById('rLotAcc').textContent = `${r.lot} / ${r.accounts} Hesap`;
+  document.getElementById('rTotalLot').textContent = r.totalLot.toLocaleString('tr-TR');
+  document.getElementById('rCost').textContent = formatTL(r.totalCost);
+  document.getElementById('rSale').textContent = formatTL(r.totalSale);
+  document.getElementById('rPerLotLabel').textContent = twoAcc ? 'Ort. Lot Başına Kâr' : 'Lot Başına Kâr';
+  document.getElementById('rPerLot').textContent = formatTL(r.perLot);
+  document.getElementById('rDays').textContent = (r.days !== null && r.days !== undefined) ? `Borsada ${r.days} İş Günü Bekletildi` : 'Tarih girilmedi';
+
+  const profitBox = document.getElementById('rProfitBox');
+  profitBox.classList.toggle('neg', r.profit < 0);
+  document.getElementById('rProfit').textContent = (r.profit>=0?'+':'') + formatTL(r.profit);
+
+  document.getElementById('resultCard').classList.add('show');
+}
+
+document.getElementById('calcBtn').addEventListener('click', calculate);
+
+document.getElementById('clearBtn').addEventListener('click', ()=>{
+  document.getElementById('fStock').value = '';
+  document.getElementById('fBuyPrice').value = '';
+  document.getElementById('fSellPrice').value = '';
+  document.getElementById('fSellPrice2').value = '';
+  document.getElementById('fLot').value = '';
+  document.getElementById('fBuyDate').value = '';
+  document.getElementById('fSellDate').value = '';
+  selectedAccounts = 1;
+  accBtns.forEach(b=>b.classList.remove('active'));
+  accBtns[0].classList.add('active');
+  updateAccountUI();
+  clearErrorStyles();
+  document.getElementById('resultCard').classList.remove('show');
+  editingId = null;
+  document.getElementById('calcBtn').textContent = 'Hesapla';
+});
+
+/* ---------- 5. GEÇMİŞ (LocalStorage) YÖNETİMİ ---------- */
+
+function loadRecords(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  }catch(e){
+    console.error('Kayıtlar okunamadı:', e);
+    return [];
+  }
+}
+
+function persistRecords(list){
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  }catch(e){
+    console.error('Kayıtlar yazılamadı:', e);
+    showToast('Kayıt sırasında bir hata oluştu.', true);
+  }
+}
+
+function saveOrUpdateRecord(record){
+  const list = loadRecords();
+  const idx = list.findIndex(r=>r.id === record.id);
+  if(idx >= 0){ list[idx] = record; }
+  else{ list.push(record); }
+  persistRecords(list);
+}
+
+function deleteRecord(id){
+  const list = loadRecords().filter(r=>r.id !== id);
+  persistRecords(list);
+  renderTable();
+  renderStats();
+  showToast('İşlem silindi.');
+}
+
+function editRecord(id){
+  const list = loadRecords();
+  const r = list.find(x=>x.id === id);
+  if(!r) return;
+
+  document.getElementById('fStock').value = r.stock;
+  document.getElementById('fBuyPrice').value = formatNum(r.buyPrice);
+  document.getElementById('fSellPrice').value = formatNum(r.sellPrice);
+  document.getElementById('fSellPrice2').value = (r.sellPrice2 !== null && r.sellPrice2 !== undefined) ? formatNum(r.sellPrice2) : '';
+  document.getElementById('fLot').value = r.lot;
+  document.getElementById('fBuyDate').value = r.buyDate || '';
+  document.getElementById('fSellDate').value = r.sellDate || '';
+
+  selectedAccounts = r.accounts;
+  accBtns.forEach(b=> b.classList.toggle('active', Number(b.dataset.val) === r.accounts));
+  updateAccountUI();
+
+  editingId = r.id;
+  document.getElementById('calcBtn').textContent = 'Güncelle ve Kaydet';
+  window.scrollTo({top:0, behavior:'smooth'});
+  showToast('Düzenleme modu: bilgileri güncelleyip "Güncelle ve Kaydet" butonuna basın.');
+}
+
+/* ---------- 6. TABLO: ARAMA, SIRALAMA, RENDER ---------- */
+
+let currentSort = 'date_desc';
+let currentSearch = '';
+
+document.getElementById('searchBox').addEventListener('input', function(){
+  currentSearch = this.value.trim().toUpperCase();
+  renderTable();
+});
+
+document.getElementById('sortSelect').addEventListener('change', function(){
+  currentSort = this.value;
+  renderTable();
+});
+
+// Tablo başlıklarına tıklayınca da sıralama yapılabilir
+document.querySelectorAll('thead th[data-key]').forEach(th=>{
+  th.addEventListener('click', ()=>{
+    const key = th.dataset.key;
+    const map = {
+      profit:'profit_desc', pct:'pct_desc', lot:'lot_desc',
+      createdAt:'date_desc'
+    };
+    if(map[key]){
+      currentSort = currentSort === map[key] ? map[key].replace('desc','asc') : map[key];
+      document.getElementById('sortSelect').value = (currentSort in {date_desc:1,date_asc:1,profit_desc:1,profit_asc:1,lot_desc:1,pct_desc:1}) ? currentSort : 'date_desc';
+      renderTable();
+    }
+  });
+});
+
+function sortRecords(list){
+  const sorted = [...list];
+  switch(currentSort){
+    case 'date_desc': sorted.sort((a,b)=> new Date(b.createdAt) - new Date(a.createdAt)); break;
+    case 'date_asc': sorted.sort((a,b)=> new Date(a.createdAt) - new Date(b.createdAt)); break;
+    case 'profit_desc': sorted.sort((a,b)=> b.profit - a.profit); break;
+    case 'profit_asc': sorted.sort((a,b)=> a.profit - b.profit); break;
+    case 'lot_desc': sorted.sort((a,b)=> b.totalLot - a.totalLot); break;
+    case 'pct_desc': sorted.sort((a,b)=> b.pct - a.pct); break;
+    default: break;
+  }
+  return sorted;
+}
+
+function renderTable(){
+  const all = loadRecords();
+  let filtered = currentSearch ? all.filter(r=> r.stock.toUpperCase().includes(currentSearch)) : all;
+  filtered = sortRecords(filtered);
+
+  const tbody = document.getElementById('tableBody');
+  tbody.innerHTML = '';
+
+  document.getElementById('emptyState').style.display = filtered.length ? 'none' : 'block';
+
+  filtered.forEach(r=>{
+    const tr = document.createElement('tr');
+    const createdDateStr = new Date(r.createdAt).toLocaleDateString('tr-TR');
+    tr.innerHTML = `
+      <td>${createdDateStr}</td>
+      <td><strong>${r.stock}</strong></td>
+      <td>${r.accounts} Hesap</td>
+      <td>${formatDateTR(r.buyDate)}</td>
+      <td>${formatDateTR(r.sellDate)}</td>
+      <td>${r.days !== null && r.days !== undefined ? r.days + ' gün' : '—'}</td>
+      <td class="num">${formatTL(r.buyPrice)}</td>
+      <td class="num">${(r.accounts===2 && r.sellPrice2!==null && r.sellPrice2!==undefined) ? formatTL(r.sellPrice)+' / '+formatTL(r.sellPrice2) : formatTL(r.sellPrice)}</td>
+      <td class="num">${r.lot}</td>
+      <td class="num">${r.totalLot}</td>
+      <td class="num">${formatTL(r.totalCost)}</td>
+      <td class="num">${formatTL(r.totalSale)}</td>
+      <td class="num ${r.profit>=0?'profit-pos':'profit-neg'}">${r.profit>=0?'+':''}${formatTL(r.profit)}</td>
+      <td class="num ${r.pct>=0?'profit-pos':'profit-neg'}">${r.pct>=0?'+':''}${formatNum(r.pct)}%</td>
+      <td>
+        <div class="row-actions">
+          <button class="edit-btn" data-id="${r.id}">Düzenle</button>
+          <button class="del-btn" data-id="${r.id}">Sil</button>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll('.edit-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=> editRecord(btn.dataset.id));
+  });
+  tbody.querySelectorAll('.del-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=> confirmDelete(btn.dataset.id));
+  });
+}
+
+/* ---------- 7. ONAY MODALI (Silme işlemleri için) ---------- */
+
+let pendingAction = null;
+
+function openModal(title, text, onConfirm){
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalText').textContent = text;
+  pendingAction = onConfirm;
+  document.getElementById('confirmModal').classList.add('show');
+}
+function closeModal(){
+  document.getElementById('confirmModal').classList.remove('show');
+  pendingAction = null;
+}
+document.getElementById('modalCancel').addEventListener('click', closeModal);
+document.getElementById('modalConfirm').addEventListener('click', ()=>{
+  if(pendingAction) pendingAction();
+  closeModal();
+});
+
+function confirmDelete(id){
+  openModal('Bu işlemi silmek istediğinize emin misiniz?', 'Bu işlem geri alınamaz.', ()=> deleteRecord(id));
+}
+
+document.getElementById('clearAllBtn').addEventListener('click', ()=>{
+  openModal('Tüm verileri silmek istediğinize emin misiniz?', 'Kayıtlı tüm halka arz işlemleri kalıcı olarak silinecek. Bu işlem geri alınamaz.', ()=>{
+    persistRecords([]);
+    renderTable();
+    renderStats();
+    showToast('Tüm veriler silindi.');
+  });
+});
+
+/* ---------- 8. İSTATİSTİK ŞERİDİ ---------- */
+
+function renderStats(){
+  const list = loadRecords();
+  const strip = document.getElementById('tickerStrip');
+
+  if(!list.length){
+    document.getElementById('stTotalCount').textContent = '0';
+    document.getElementById('stTotalCost').textContent = '0 TL';
+    document.getElementById('stTotalSale').textContent = '0 TL';
+    document.getElementById('stTotalProfit').textContent = '0 TL';
+    document.getElementById('stAvgPct').textContent = '%0';
+    document.getElementById('stTotalLot').textContent = '0';
+    document.getElementById('stBestStock').textContent = '—';
+    document.getElementById('stMinMax').textContent = '— / —';
+    strip.style.setProperty('--ticker-accent', 'var(--gold-500)');
+    return;
+  }
+
+  const totalCost = list.reduce((s,r)=> s + r.totalCost, 0);
+  const totalSale = list.reduce((s,r)=> s + r.totalSale, 0);
+  const totalProfit = list.reduce((s,r)=> s + r.profit, 0);
+  const avgPct = list.reduce((s,r)=> s + r.pct, 0) / list.length;
+  const totalLot = list.reduce((s,r)=> s + r.totalLot, 0);
+
+  const best = [...list].sort((a,b)=> b.profit - a.profit)[0];
+  const maxProfit = Math.max(...list.map(r=>r.profit));
+  const minProfit = Math.min(...list.map(r=>r.profit));
+
+  document.getElementById('stTotalCount').textContent = list.length;
+  document.getElementById('stTotalCost').textContent = formatTL(totalCost);
+  document.getElementById('stTotalSale').textContent = formatTL(totalSale);
+
+  const profitEl = document.getElementById('stTotalProfit');
+  profitEl.textContent = (totalProfit>=0?'+':'') + formatTL(totalProfit);
+  profitEl.className = 'ticker-value num ' + (totalProfit >= 0 ? 'pos':'neg');
+
+  document.getElementById('stAvgPct').textContent = '%' + formatNum(avgPct);
+  document.getElementById('stTotalLot').textContent = totalLot.toLocaleString('tr-TR');
+  document.getElementById('stBestStock').textContent = best ? best.stock : '—';
+  document.getElementById('stMinMax').textContent = `${formatTL(maxProfit)} / ${formatTL(minProfit)}`;
+
+  // Ticker şeridinin üst çizgisi, portföyün genel durumuna göre yeşil/altın/kırmızı olur
+  strip.style.setProperty('--ticker-accent', totalProfit > 0 ? 'var(--green-600)' : (totalProfit < 0 ? 'var(--red-600)' : 'var(--gold-500)'));
+}
+
+/* ---------- 9. DIŞA AKTARMA: EXCEL ---------- */
+
+document.getElementById('exportExcelBtn').addEventListener('click', ()=>{
+  const list = sortRecords(loadRecords());
+  if(!list.length){ showToast('Aktarılacak işlem bulunamadı.', true); return; }
+
+  const rows = list.map(r=>({
+    'İşlem Tarihi': new Date(r.createdAt).toLocaleDateString('tr-TR'),
+    'Hisse Adı': r.stock,
+    'Hesap Sayısı': r.accounts,
+    'Alış Tarihi': formatDateTR(r.buyDate),
+    'Satış Tarihi': formatDateTR(r.sellDate),
+    'Borsada İş Günü': r.days ?? '',
+    'Alış Fiyatı (TL)': r.buyPrice,
+    '1. Hesap Satış Fiyatı (TL)': r.sellPrice,
+    '2. Hesap Satış Fiyatı (TL)': (r.accounts===2 && r.sellPrice2!==null && r.sellPrice2!==undefined) ? r.sellPrice2 : '',
+    'Lot': r.lot,
+    'Toplam Lot': r.totalLot,
+    'Toplam Maliyet (TL)': r.totalCost,
+    'Toplam Satış (TL)': r.totalSale,
+    'Net Kâr (TL)': r.profit,
+    'Kâr %': Number(r.pct.toFixed(2))
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+
+  // Başlık satırını renklendir
+  const headerRange = XLSX.utils.decode_range(ws['!ref']);
+  for(let c = headerRange.s.c; c <= headerRange.e.c; c++){
+    const cellRef = XLSX.utils.encode_cell({r:0, c});
+    if(!ws[cellRef]) continue;
+    ws[cellRef].s = {
+      fill:{ fgColor:{ rgb:'0F2A47' } },
+      font:{ color:{ rgb:'FFFFFF' }, bold:true },
+      alignment:{ horizontal:'center' }
+    };
+  }
+  ws['!cols'] = Object.keys(rows[0]).map(()=>({wch:16}));
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Halka Arz İşlemleri');
+  XLSX.writeFile(wb, `halka-arz-islemleri-${toISO(new Date())}.xlsx`);
+  showToast('Excel dosyası indirildi.');
+});
+
+/* ---------- 10. DIŞA AKTARMA: PDF ---------- */
+
+document.getElementById('exportPdfBtn').addEventListener('click', ()=>{
+  const list = sortRecords(loadRecords());
+  if(!list.length){ showToast('Aktarılacak işlem bulunamadı.', true); return; }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation:'landscape', unit:'mm', format:'a4' });
+
+  doc.setFontSize(16);
+  doc.setTextColor(15,42,71);
+  doc.text('Halka Arz İşlem Geçmişi', 14, 15);
+
+  doc.setFontSize(10);
+  doc.setTextColor(90,100,115);
+  doc.text('Oluşturulma Tarihi: ' + new Date().toLocaleString('tr-TR'), 14, 21);
+
+  const head = [[
+    'İşlem Tarihi','Hisse','Hesap','Alış T.','Satış T.','İş Günü',
+    'Alış (TL)','Satış 1 (TL)','Satış 2 (TL)','Lot','Top. Lot','Top. Maliyet','Top. Satış','Net Kâr','Kâr %'
+  ]];
+
+  const body = list.map(r=>[
+    new Date(r.createdAt).toLocaleDateString('tr-TR'),
+    r.stock, r.accounts + ' Hesap', formatDateTR(r.buyDate), formatDateTR(r.sellDate),
+    r.days ?? '—', formatNum(r.buyPrice), formatNum(r.sellPrice),
+    (r.accounts===2 && r.sellPrice2!==null && r.sellPrice2!==undefined) ? formatNum(r.sellPrice2) : '—',
+    r.lot, r.totalLot,
+    formatNum(r.totalCost), formatNum(r.totalSale),
+    (r.profit>=0?'+':'') + formatNum(r.profit), (r.pct>=0?'+':'') + formatNum(r.pct)+'%'
+  ]);
+
+  doc.autoTable({
+    head, body,
+    startY:26,
+    styles:{ fontSize:7.5, cellPadding:2 },
+    headStyles:{ fillColor:[15,42,71], textColor:255, fontStyle:'bold' },
+    alternateRowStyles:{ fillColor:[247,249,251] },
+    margin:{ left:10, right:10 }
+  });
+
+  doc.save(`halka-arz-islemleri-${toISO(new Date())}.pdf`);
+  showToast('PDF dosyası indirildi.');
+});
+
+/* ---------- 11. BAŞLANGIÇ ---------- */
+
+window.addEventListener('DOMContentLoaded', ()=>{
+  renderTable();
+  renderStats();
+});
+</script>
+</body>
+</html>
